@@ -115,17 +115,50 @@ def BitsToString(binArray):
 	asciiList = asciiArray.tolist()
 	return ''.join(chr(i) for i in asciiList)
 
+def LowPass(signalArray, wc):
+	'''
+	Implements a low pass filter
 
+	signal array: a numpy array representing an audio signal
+	wc: the desired corner frequency
+
+	returns a numpy array representing the filtered audio signal 
+	of the same size as the original signal
+	'''
+	n = np.arange(-41,42)
+	h = wc / pi * np.sinc(wc * n / pi)
+
+	filteredSignal = np.convolve(signalArray, h, 'same')
+	return filteredSignal
+
+def HighPass(signalArray, wc):
+	'''
+	Implements a high pass filter
+
+	signal array: a numpy array representing an audio signal
+	wc: the desired corner frequency
+
+	returns a numpy array representing the filtered audio signal 
+	of the same size as the original signal
+	'''
+	filteredSignal = signalArray - LowPass(signalArray, wc)
+	return filteredSignal
 
 if __name__ == "__main__":
 	Fs = 44100
 	message = StringToBits("A")
 	audioArray = Modulate(message, Fs, 440)
-	receivedArray = PlayRecord(audioArray, Fs)
-	t = np.linspace(0, len(receivedArray), len(receivedArray))
-	Y = np.fft.fft(receivedArray)
-	Y = np.fft.fftshift(Y, )
-	fs = np.linspace(-pi, pi, len(receivedArray))
-	plt.plot(fs, np.abs(Y))
+	# receivedArray = PlayRecord(audioArray, Fs)
+	t = np.linspace(0, len(audioArray), len(audioArray))
+	c = np.cos(2 * pi * t * 440)
+	l = LowPass(HighPass(audioArray, 200), 200)
+	S = np.fft.fft(l)
+	S = np.fft.fftshift(S)
+	plt.plot(abs(S))
 	plt.show()
+	# Y = np.fft.fft(receivedArray)
+	# Y = np.fft.fftshift(Y, )
+	# fs = np.linspace(-pi, pi, len(receivedArray))
+	# plt.plot(fs, np.abs(Y))
+	# plt.show()
 
