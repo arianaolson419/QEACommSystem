@@ -32,13 +32,12 @@ def Modulate(binArray, Fs, fc, bitTime = .25):
 		signalArray[firstIndex:secondIndex] *= amp
 		count += 1
 	audioSignal = signalArray * carrier
-	plt.plot(t, audioSignal)
-	plt.show()
+	return audioSignal
 
-	return carrier
-
-def PlaySound(signalArray, Fs):
-	sd.play(signalArray, Fs)
+def PlayRecord(signalArray, Fs):
+	sd.default.samplerate = Fs
+	sd.default.channels = 1
+	return sd.playrec(signalArray, blocking=True)
 
 
 def Demodulate(signalArray, Fs):
@@ -58,5 +57,16 @@ def Transmit(Fs):
 
 
 if __name__ == "__main__":
-	pass
+	Fs = 44100
+	sd.default.samplerate = Fs
+	sd.default.channels = 1
+	message = StringToBits("A")
+	audioArray = Modulate(message, Fs, 440)
+	receivedArray = PlayRecord(audioArray, Fs)
+	t = np.linspace(0, len(receivedArray), len(receivedArray))
+	Y = np.fft.fft(receivedArray)
+	Y = np.fft.fftshift(Y, )
+	fs = np.linspace(-pi, pi, len(receivedArray))
+	plt.plot(fs, np.abs(Y))
+	plt.show()
 
