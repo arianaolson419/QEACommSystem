@@ -24,8 +24,6 @@ sd.default.channels = 1
 
 
 if __name__ == '__main__':
-	plt.stem(xc)	#stem plot of convolved signal
-	recording = sd.playrec(y)	#play a 440Hz note
-	plt.figure(2)
-	plt.plot(recording)
+	sd.play(y)	#play a 440Hz note
+	plt.plot(y)
 	plt.show()
