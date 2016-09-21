@@ -37,7 +37,7 @@ def StringToBits(message):
 	'''
 	asciiArray = np.array([ord(c) for c in message], dtype=np.uint8)
 	binArray = np.unpackbits(asciiArray)
-
+	binArray = np.insert(binArray, 0, 0)	# starts every array w/0 for demodulating purposes
 	return binArray
 
 def Modulate(binArray, Fs, fc, bitTime = .25):
@@ -77,6 +77,7 @@ def Modulate(binArray, Fs, fc, bitTime = .25):
 		count += 1
 	# phase of carrier is shifted by pi at each sign change
 	# cos(x + pi) = -cos(x)
+
 	audioSignal = signalArray * carrier	
 	return audioSignal
 
@@ -115,19 +116,20 @@ def BitsToString(binArray):
 	asciiList = asciiArray.tolist()
 	return ''.join(chr(i) for i in asciiList)
 
-def LowPass(signalArray, wc):
+def LowPass(signalArray, wc, Fs):
 	'''
 	Implements a low pass filter
 
 	signal array: a numpy array representing an audio signal
-	wc: the desired corner frequency
+	wc: the desired corner frequency in Hz
 
 	returns a numpy array representing the filtered audio signal 
 	of the same size as the original signal
 	'''
-	n = np.arange(-41,42)
-	h = wc / pi * np.sinc(wc * n / pi)
 
+	W = wc  * 2 * pi / Fs
+	n = np.arange(-41,42)
+	h = W / pi * np.sinc(W * n / pi)
 	filteredSignal = np.convolve(signalArray, h, 'same')
 	return filteredSignal
 
@@ -147,18 +149,30 @@ def HighPass(signalArray, wc):
 if __name__ == "__main__":
 	Fs = 44100
 	message = StringToBits("A")
+	print message
 	audioArray = Modulate(message, Fs, 440)
-	# receivedArray = PlayRecord(audioArray, Fs)
-	t = np.linspace(0, len(audioArray), len(audioArray))
-	c = np.cos(2 * pi * t * 440)
-	l = LowPass(HighPass(audioArray, 200), 200)
-	S = np.fft.fft(l)
-	S = np.fft.fftshift(S)
-	plt.plot(abs(S))
+
+	A = np.fft.fftshift(np.fft.fft(audioArray))
+	fs = np.linspace(-pi, pi, len(A))
+	plt.figure(1)
+	plt.subplot(311)
+	plt.plot(fs, abs(A))
+
+	t = np.linspace(0, len(audioArray)/Fs, len(audioArray))
+	c = np.cos(2 * pi * 440 * t)
+
+	demod = LowPass(audioArray * c, 420, Fs)
+	D = np.fft.fftshift(np.fft.fft(demod))
+	fs = np.linspace(-pi, pi, len(D))
+	plt.subplot(312)
+	plt.plot(fs, abs(D))
+	
+	plt.subplot(313)
+	plt.plot(t, abs(demod))
 	plt.show()
-	# Y = np.fft.fft(receivedArray)
-	# Y = np.fft.fftshift(Y, )
-	# fs = np.linspace(-pi, pi, len(receivedArray))
-	# plt.plot(fs, np.abs(Y))
-	# plt.show()
+
+
+
+
+
 
