@@ -18,15 +18,6 @@ import numpy as np
 from numpy import pi
 import matplotlib.pyplot as plt
 
-def getMessage():
-	'''
-	Prompts the user to type in a short message that will be transmitted via an audio signal
-
-	returns the message as a string
-	'''
-	message = raw_input("Type a message: ")
-	return message
-
 def StringToBits(message):
 	'''
 	Converts a string to its binary representation
@@ -37,10 +28,10 @@ def StringToBits(message):
 	'''
 	asciiArray = np.array([ord(c) for c in message], dtype=np.uint8)
 	binArray = np.unpackbits(asciiArray)
-	binArray = np.insert(binArray, 0, 0)	# starts every array w/0 for demodulating purposes
+	# binArray = np.insert(binArray, 0, 0)
 	return binArray
 
-def Modulate(binArray, Fs, fc, bitTime = .25):
+def Modulate(binArray, Fs, fc, bitTime):
 	'''
 	Modulates a binary array into an array that can be played
 	as an audible signal. Modulation done using Binary Phase-
@@ -81,7 +72,7 @@ def Modulate(binArray, Fs, fc, bitTime = .25):
 	audioSignal = signalArray * carrier	
 	return audioSignal
 
-def PlayRecord(signalArray, Fs):
+def PlayRecord(signalArray, Fs, record=True):
 	'''
 	Simultaneously plays an array representing an audio signal 
 	and records the resulting sound
@@ -92,15 +83,58 @@ def PlayRecord(signalArray, Fs):
 	returns a numpy array of the recorded signal
 	'''
 
+	arrayShape = np.shape(signalArray)
 	sd.default.samplerate = Fs
 	sd.default.channels = 1
 
-	return sd.playrec(signalArray, blocking=True)
+	if record == True:
+		audioArray = sd.playrec(signalArray, blocking=True)
+		return np.reshape(audioArray, arrayShape)
+	else:
+		audioArray = sd.play(signalArray, blocking=True)
 
 
-def Demodulate(signalArray, Fs):
-	# todo: implement demodulation
-	pass
+
+
+def Demodulate(signalArray, Fs, fc):
+	signalArray = HighPass(LowPass(signalArray, fc * 1.1, Fs), fc * 0.9, Fs)
+	t = np.linspace(0, len(signalArray)/Fs, len(signalArray))
+	c = np.cos(2 * pi * fc * t)
+	shiftedArray = signalArray * c
+	middle = LowPass(shiftedArray, fc/2, Fs) 
+	return middle
+
+def SignalToBits(signalArray, bitTime, Fs):
+	binArray = [0]
+	threshold = np.max(signalArray) / 3
+	step = int(bitTime * Fs)
+	print step
+	index = 0
+	sign = 0
+
+	for i in range(len(signalArray)):
+		if np.abs(signalArray[i]) > threshold:
+			index = i + int(step * 1.25)
+			if signalArray[i] > 0:
+				sign = 1
+			elif signalArray[i] < 0:
+				sign = -1 
+			break
+	while index < len(signalArray):
+		if signalArray[index] > 0:
+			currentSign = 1
+		elif signalArray[index] < 0:
+			currentSign = -1
+		
+		if currentSign == sign:
+			binArray.append(0)
+		else:
+			binArray.append(1)
+
+		index += step
+
+
+	return binArray
 
 def BitsToString(binArray):
 	'''
@@ -133,7 +167,7 @@ def LowPass(signalArray, wc, Fs):
 	filteredSignal = np.convolve(signalArray, h, 'same')
 	return filteredSignal
 
-def HighPass(signalArray, wc):
+def HighPass(signalArray, wc, Fs):
 	'''
 	Implements a high pass filter
 
@@ -143,34 +177,60 @@ def HighPass(signalArray, wc):
 	returns a numpy array representing the filtered audio signal 
 	of the same size as the original signal
 	'''
-	filteredSignal = signalArray - LowPass(signalArray, wc)
+	filteredSignal = signalArray - LowPass(signalArray, wc, Fs)
 	return filteredSignal
 
-if __name__ == "__main__":
-	Fs = 44100
-	message = StringToBits("A")
-	print message
-	audioArray = Modulate(message, Fs, 440)
+def TimeDomainPlot(signalArray, Fs):
+	t = np.linspace(0, len(signalArray)/Fs, len(signalArray))
+	plt.plot(t, signalArray)
 
-	A = np.fft.fftshift(np.fft.fft(audioArray))
-	fs = np.linspace(-pi, pi, len(A))
-	plt.figure(1)
-	plt.subplot(311)
-	plt.plot(fs, abs(A))
+def FrequencyDomainPlot(signalArray):
+	S = np.fft.fftshift(np.fft.fft(signalArray))
+	fs = np.linspace(-pi, pi, len(S))
+	plt.plot(fs, abs(S))
 
-	t = np.linspace(0, len(audioArray)/Fs, len(audioArray))
-	c = np.cos(2 * pi * 440 * t)
-
-	demod = LowPass(audioArray * c, 420, Fs)
-	D = np.fft.fftshift(np.fft.fft(demod))
-	fs = np.linspace(-pi, pi, len(D))
-	plt.subplot(312)
-	plt.plot(fs, abs(D))
+def Modem(messageOut, Fs = 44100, fc = 800, bitTime = 0.25):
+	hello = Modulate(np.zeros(2), Fs, 440, bitTime)
 	
-	plt.subplot(313)
-	plt.plot(t, abs(demod))
+	binArray = StringToBits(messageOut)
+	transmittedSignal = Modulate(binArray, Fs, fc, bitTime)
+	PlayRecord(hello, Fs, record=False)
+	receivedSignal = PlayRecord(transmittedSignal, Fs)
+	demod = Demodulate(receivedSignal, Fs, fc)
+	binArray = SignalToBits(demod, bitTime, Fs)
+	messageIn = BitsToString(binArray)
+
+	print "transmitted: ", messageOut
+	print "received: ", messageIn
+	
+	# Make the plots
+	plt.figure(1)
+
+	plt.subplot(511)
+	FrequencyDomainPlot(transmittedSignal)
+	plt.title("FFT of Transmitted Signal")
+
+	plt.subplot(512)
+	TimeDomainPlot(receivedSignal, Fs)
+	plt.title("Received Signal")
+
+	plt.subplot(513)
+	FrequencyDomainPlot(receivedSignal)
+	plt.title("FFT of Received Signal")
+
+	plt.subplot(514)
+	TimeDomainPlot(demod, Fs)
+	plt.title("Demodulated Signal")
+
+	plt.subplot(515)
+	FrequencyDomainPlot(demod)
+	plt.title("FFT of Demodulated Signal")
+
 	plt.show()
 
+if __name__ == "__main__":
+	Modem("a")
+	
 
 
 
